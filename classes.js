@@ -36,7 +36,7 @@ Limb = class Limb {
 		this.angle = data.angle;
 	}
 
-	draw() {}
+	draw(/*will need a lot of parameters here*/) {}
 	update() {}
 }
 
@@ -80,7 +80,7 @@ Being = class Being {
 
 	draw() {
 		for(limb of this.limbs) {
-			limb.update();
+			limb.draw();
 		}
 	}
 }
