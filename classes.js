@@ -11,16 +11,16 @@ NeuralSystem = class NeuralSystem {
 		}
 
 		if(!DNAObject) {
-			DNAObject = {inputs: [], outputs: [], neurons: []};
+			DNAObject = {inputs: {}, outputs: {}, neurons: {}};
 		}
 		if(!DNAObject.inputs) {
-			DNAObject.inputs = [];
+			DNAObject.inputs = {};
 		}
 		if(!DNAObject.outputs) {
-			DNAObject.outputs = [];
+			DNAObject.outputs = {};
 		}
 		if(!DNAObject.neurons) {
-			DNAObject.neurons = [];
+			DNAObject.neurons = {};
 		}
 
 		this.inputs  = DNAObject.inputs;
@@ -66,6 +66,8 @@ Being = class Being {
 
 		// Neural System loading
 		this.neuralSystem = new NeuralSystem(DNAObject.neuralSystem);
+		this.energy = 0;
+		this.pain = 0;
 	}
 
 	computeDNA() {
@@ -73,6 +75,10 @@ Being = class Being {
 	}
 
 	update() {
+		/* 
+		Boucler sur les prop d'un objet:
+		Object.keys(obj).forEach(function(prop){});
+		 */
 		for(limb of this.limbs) {
 			limb.update();
 		}
