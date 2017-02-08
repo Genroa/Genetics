@@ -71,6 +71,18 @@ Being = class Being {
 	computeDNA() {
 		return JSON.stringify(this);
 	}
+
+	update() {
+		for(limb of this.limbs) {
+			limb.update();
+		}
+	}
+
+	draw() {
+		for(limb of this.limbs) {
+			limb.update();
+		}
+	}
 }
 
 
