@@ -64,10 +64,13 @@ const OUTPUT_LIMB = 1;
 
 Limb = class Limb {
 	constructor(data) {
-		this.angle = data.angle;
+		if(data) {
+			this.angle = data.angle;
+		}
 		this.neededNeurons = 3;
 		this.type = INPUT_LIMB;
-		this.linkedNeurons = {};
+		this.class = "Limb";
+		this.linkedNeurons = [];
 	}
 	
 	setLinkedNeurons(neurons) {
@@ -84,12 +87,17 @@ Sensor = class Sensor extends Limb {
 	constructor(data) {
 		super(data);
 		// No need to specify the type : it is INPUT_LIMB by default
+		this.class = "Sensor";
 	}
 }
 
 
 RGBSensor = class RGBSensor extends Sensor {
-	
+	constructor(data) {
+		super(data);
+		// No need to specify the type : it is INPUT_LIMB by default
+		this.class = "RGBSensor";
+	}
 }
 
 
@@ -98,30 +106,40 @@ Motor = class Motor extends Limb {
 		super(data);
 		this.type = OUTPUT_LIMB;
 		this.neededNeurons = 1;
+		this.class = "Motor";
 	}
 }
 
 
-/*
-DNA est juste le stockage au format JSON de l'objet Being
-*/
+
 Being = class Being {
 	constructor(DNA) {
 		var DNAObject = DNA;
 
+		console.log(DNAObject);
+
 		if(DNA instanceof String) {
 			DNAObject = JSON.parse(DNA);
+			/*
+			Also rebuild objects from it
+			*/
 		}
 
 		if(!DNAObject || !DNAObject.sensors || !DNAObject.motors || !DNAObject.neuralSystem) {
-			throw new SyntaxError("Invalid DNA :"+JSON.stringify(DNAObject));
+			throw new SyntaxError("Invalid DNA : "+JSON.stringify(DNAObject));
 		}
 
 		// Limbs loading
 		this.sensors = [];
 		var sensorsArray = DNAObject.sensors;
-		for(sensor of sensorsArray) {
-			this.sensors.push(new Limb(limb));
+		for(let sensor of sensorsArray) {
+			this.sensors.push(sensor);
+		}
+
+		this.motors = [];
+		var motorsArray = DNAObject.motors;
+		for(let motor of motorsArray) {
+			this.motors.push(motor);
 		}
 
 		// Neural System loading
@@ -187,7 +205,35 @@ buildRandomMotors = function(number) {
 	return motors;
 }
 
-computeNeededNeuronsForLimbs(
+computeNeededNeuronsForLimbs = function(limbs) {
+	let count = 0;
+	for(let limb of limbs) {
+		count += limb.neededNeurons;
+	}
+	return count;
+}
+
+assignNeuronsToLimbs = function(sensors, motors, neuralSystem) {
+	let neuronCount = 0;
+	let i=0;
+	let neurons = Object.values(neuralSystem.inputs);
+	for(sensor of sensors) {
+		for(let j=0; j<sensor.neededNeurons; j++) {
+			sensor.linkedNeurons.push(neurons[i]);
+			i++;
+		}
+	}
+
+	i=0;
+	neurons = Object.values(neuralSystem.outputs);
+	for(motor of motors) {
+		for(let j=0; j<motor.neededNeurons; j++) {
+			motor.linkedNeurons.push(neurons[i]);
+			i++;
+		}
+	}
+}
+
 
 buildRandomBeing = function() {
 	DNAObject = {};
@@ -196,11 +242,16 @@ buildRandomBeing = function() {
 	
 	let sensors = buildRandomSensors(3);
 	let motors = buildRandomMotors(3);
+
+	let inputNeuronsNumber = computeNeededNeuronsForLimbs(sensors);
+	let outputNeuronsNumber = computeNeededNeuronsForLimbs(motors);
 	
-	let inputNeuronsNumber = sensors.length * 3;
-	
-	DNAObject.neuralSystem = buildRandomNeuralSystem(inputNeuronsNumber);
-	
+	DNAObject.neuralSystem = buildRandomNeuralSystem(inputNeuronsNumber, outputNeuronsNumber);
+
+	assignNeuronsToLimbs(sensors, motors, DNAObject.neuralSystem);
+
+	DNAObject.sensors = sensors;
+	DNAObject.motors = motors;
 	
 	return new Being(DNAObject);
 }
