@@ -116,8 +116,6 @@ Being = class Being {
 	constructor(DNA) {
 		var DNAObject = DNA;
 
-		console.log(DNAObject);
-
 		if(DNA instanceof String) {
 			DNAObject = JSON.parse(DNA);
 			/*
@@ -125,8 +123,20 @@ Being = class Being {
 			*/
 		}
 
-		if(!DNAObject || !DNAObject.sensors || !DNAObject.motors || !DNAObject.neuralSystem) {
-			throw new SyntaxError("Invalid DNA : "+JSON.stringify(DNAObject));
+		if(!DNAObject 
+		|| !DNAObject.sensors 
+		|| !DNAObject.motors 
+		|| !DNAObject.neuralSystem
+		|| !DNAObject.energyNeuron
+		|| !DNAObject.damageNeuron
+		|| !DNAObject.ageNeuron
+		|| !DNAObject.reproductionNeuron) {
+			try {
+				throw new SyntaxError("Invalid DNA : "+JSON.stringify(DNAObject));
+			} catch(e) {
+				console.log(DNAObject);
+				throw new SyntaxError("Invalid DNA");
+			}
 		}
 
 		// Limbs loading
@@ -144,8 +154,17 @@ Being = class Being {
 
 		// Neural System loading
 		this.neuralSystem = new NeuralSystem(DNAObject.neuralSystem);
+		
 		this.energy = 1000;
-		this.pain = 0;
+		this.energyNeuron = DNAObject.energyNeuron;
+		
+		this.damage = 0;
+		this.damageNeuron = DNAObject.damageNeuron;
+		
+		this.tick = 0;
+		this.ageNeuron = DNAObject.ageNeuron;
+		
+		this.reproductionNeuron = DNAObject.reproductionNeuron;
 	}
 
 	computeDNA() {
@@ -157,15 +176,36 @@ Being = class Being {
 		Boucler sur les prop d'un objet:
 		Object.keys(obj).forEach(function(prop){});
 		 */
-		for(limb of this.limbs) {
-			limb.update();
-		}
+		this.tick+=1;
+		
+		this.damageNeuron.activation = this.damage;
+		this.energyNeuron.activation = this.energy;
+		
+		let being = this;
+		
+		Object.values(this.neuralSystem.inputs).forEach(function(neuron){
+			neuron.activateNetwork(being.tick);
+		});
 	}
 
 	draw() {
-		for(limb of this.limbs) {
-			limb.draw();
-		}
+		
+	}
+	
+	displayOutputValues() {
+		let values = [];
+		Object.values(this.neuralSystem.outputs).forEach(function(neuron) {
+			values.push(neuron.activation);
+		});
+		console.log(values);
+	}
+	
+	displayInputValues() {
+		let values = [];
+		Object.values(this.neuralSystem.inputs).forEach(function(neuron) {
+			values.push(neuron.activation);
+		});
+		console.log(values);
 	}
 }
 
@@ -173,15 +213,44 @@ Being = class Being {
 buildRandomNeuralSystem = function(inputNumber, outputNumber) {
 	var DNAObject = {inputs: {}, outputs: {}, neurons: {}};
 	
-	// Produce neurons and link them (randomly?)
+	// Produce input neurons
 	for(let i=0; i<inputNumber; i++) {
 		let neuron = new Neuron();
 		DNAObject.inputs[neuron.ID] = neuron;
 	}
 	
+	// produce output neurons
 	for(let i=0; i<outputNumber; i++) {
 		let neuron = new Neuron();
 		DNAObject.outputs[neuron.ID] = neuron;
+	}
+	
+	// produce central neural system neurons
+	let systemSize = 40;
+	let numberOfConnections = systemSize * 5;
+	for(let i=0; i<systemSize; i++) {
+		let neuron = new Neuron();
+		DNAObject.neurons[neuron.ID] = neuron;
+	}
+	
+	// "randomly" link neurons
+	// internal connections
+	for(let i=0; i<numberOfConnections; i++) {
+		let from = Object.values(DNAObject.neurons)[ Math.floor(Math.random()*systemSize) ];
+		let to = Object.values(DNAObject.neurons)[ Math.floor(Math.random()*systemSize) ];
+		from.project(to);
+	}
+	
+	for(let i=0; i<inputNumber*5; i++) {
+		let from = Object.values(DNAObject.inputs)[ Math.floor(Math.random()*inputNumber) ];
+		let to = Object.values(DNAObject.neurons)[ Math.floor(Math.random()*systemSize) ];
+		from.project(to);
+	}
+	
+	for(let i=0; i<outputNumber*5; i++) {
+		let from = Object.values(DNAObject.neurons)[ Math.floor(Math.random()*systemSize) ];
+		let to = Object.values(DNAObject.outputs)[ Math.floor(Math.random()*outputNumber) ];
+		from.project(to);
 	}
 	
 	return new NeuralSystem(DNAObject);
@@ -240,16 +309,30 @@ buildRandomBeing = function() {
 	DNAObject.sensors = [];
 	DNAObject.motors = [];
 	
-	let sensors = buildRandomSensors(3);
-	let motors = buildRandomMotors(3);
-
+	let sensors = buildRandomSensors( Math.floor(Math.random()*(5-1)+1) );
+	let motors = buildRandomMotors( Math.floor(Math.random()*(5-1)+1) );
+	
+	// +1 for energy info
+	// +1 for damage info
+	// +1 for age
 	let inputNeuronsNumber = computeNeededNeuronsForLimbs(sensors);
+	
+	// +1 for reproduction decision
 	let outputNeuronsNumber = computeNeededNeuronsForLimbs(motors);
 	
-	DNAObject.neuralSystem = buildRandomNeuralSystem(inputNeuronsNumber, outputNeuronsNumber);
+	DNAObject.neuralSystem = buildRandomNeuralSystem(inputNeuronsNumber+3, outputNeuronsNumber+1);
 
 	assignNeuronsToLimbs(sensors, motors, DNAObject.neuralSystem);
-
+	
+	let inputsArray = Object.values(DNAObject.neuralSystem.inputs);
+	let outputsArray = Object.values(DNAObject.neuralSystem.outputs);
+	
+	DNAObject.energyNeuron = inputsArray[inputNeuronsNumber]; //-1 +1
+	DNAObject.damageNeuron = inputsArray[inputNeuronsNumber+1];
+	DNAObject.ageNeuron = inputsArray[inputNeuronsNumber+2];
+	
+	DNAObject.reproductionNeuron = outputsArray[outputNeuronsNumber]; //-1 +1
+	
 	DNAObject.sensors = sensors;
 	DNAObject.motors = motors;
 	
