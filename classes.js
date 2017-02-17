@@ -36,14 +36,15 @@ World = class World {
 
 		//Create a container object called the `stage`
 		this.stage = new PIXI.Container();
-		
+		this.graphics = new PIXI.Graphics();
+		this.stage.addChild(this.graphics);
+
 		this.stopRunning = false;
 		this.beings = [];
 	}
 	
 	addBeing(being) {
 		this.beings.push(being);
-		this.stage.addChild(being.graphicBody);
 	}
 	
 	updateWorld() {
@@ -53,6 +54,7 @@ World = class World {
 	}
 	
 	drawWorld() {
+		this.graphics.clear();
 		for(let being of this.beings) {
 			being.draw(this);
 		}
@@ -201,14 +203,22 @@ Limb = class Limb {
 		this.type = INPUT_LIMB;
 		this.class = "Limb";
 		this.linkedNeurons = [];
-		this.graphicBody = new PIXI.Graphics();
+		this.color = 0x000000;
 	}
 	
 	setLinkedNeurons(neurons) {
 		this.linkedNeurons = neurons;
 	}
 	
-	draw(/*will need a lot of parameters here*/) {}
+	draw(graphics, parent) {
+		let angle = this.angle * Math.PI / 180;
+		let realX = 32*Math.cos(angle)+0*Math.sin(angle);
+		let realY = -32*Math.sin(angle)+0*Math.cos(angle);
+
+		graphics.beginFill(this.color);
+		graphics.drawCircle(parent.x+realX, parent.y+realY, 4);
+		graphics.endFill();
+	}
 	update() {}
 	
 	computeDNA() {
@@ -232,6 +242,7 @@ Sensor = class Sensor extends Limb {
 		super(data);
 		// No need to specify the type : it is INPUT_LIMB by default
 		this.class = "Sensor";
+		this.color = 0xEE42F4;
 	}
 }
 
@@ -251,6 +262,7 @@ Motor = class Motor extends Limb {
 		this.type = OUTPUT_LIMB;
 		this.neededNeurons = 1;
 		this.class = "Motor";
+		this.color = 0x4ff441;
 	}
 }
 
@@ -313,12 +325,6 @@ Being = class Being {
 		this.x = x;
 		this.y = y;
 		this.size = 64;
-		this.graphicBody = new PIXI.Graphics();
-		this.graphicBody.beginFill(0x9966FF);
-		this.graphicBody.drawCircle(0, 0, 32);
-		this.graphicBody.endFill();
-		this.graphicBody.x = this.x;
-		this.graphicBody.y = this.y;
 	}
 	
 	computeDNA() {
@@ -370,8 +376,24 @@ Being = class Being {
 	}
 
 	draw(world) {
-		this.graphicBody.x = this.x;
-		this.graphicBody.y = this.y;
+		let graphics = world.graphics;
+		
+		graphics.beginFill(0x9966FF);
+		graphics.drawCircle(this.x, this.y, 32);
+		graphics.endFill();
+
+		
+		graphics.beginFill(0x41e8f4);
+		graphics.drawCircle(this.x, this.y, 26);
+		graphics.endFill();
+
+		for(let sensor of Object.values(this.sensors)) {
+			sensor.draw(graphics, this);
+		}
+
+		for(let motor of Object.values(this.motors)) {
+			motor.draw(graphics, this);
+		}
 	}
 	
 	displayOutputValues() {
