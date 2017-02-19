@@ -20,7 +20,14 @@ generateUUID = function() {
     return uuid;
 };
 
+componentToHex = function(c) {
+    var hex = c.toString(16);
+    return hex.length == 1 ? "0" + hex : hex;
+}
 
+rgbToHex = function(r, g, b) {
+    return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+}
 /*********************
 CLASSES DEFINITION
 *********************/
@@ -36,8 +43,34 @@ World = class World {
 
 		//Create a container object called the `stage`
 		this.stage = new PIXI.Container();
+		
+		// Build graphic part
 		this.graphics = new PIXI.Graphics();
 		this.stage.addChild(this.graphics);
+		this.graphicContext = document.getElementsByTagName("canvas")[0].getContext("webgl", {preserveDrawingBuffer: true});
+
+
+		//Physics
+		this.physicsWorld = Physics();
+		var physicsWorld = this.physicsWorld;
+
+		var bounds = Physics.aabb(0, 0, width, height);
+		this.physicsWorld.add( Physics.behavior('edge-collision-detection', {
+			aabb: bounds,
+			restitution: 0.3
+		}) );
+		
+		
+		//this.physicsWorld.add( Physics.behavior('constant-acceleration'));
+		this.physicsWorld.add( Physics.behavior('body-impulse-response') );
+		this.physicsWorld.add( Physics.behavior('body-collision-detection') );
+		this.physicsWorld.add( Physics.behavior('sweep-prune') );
+
+
+		Physics.util.ticker.on(function(time) {
+			physicsWorld.step(time);
+		});
+		Physics.util.ticker.start();
 
 		this.stopRunning = false;
 		this.beings = [];
@@ -55,22 +88,32 @@ World = class World {
 	
 	drawWorld() {
 		this.graphics.clear();
+		this.graphics.lineStyle(1, 0x75048e, 1);
+
 		for(let being of this.beings) {
 			being.draw(this);
 		}
+
 	}
 	
 	run() {
+		this.drawWorld();
 		//Loop this function 60 times per second
 		if(!this.stopRunning) {
 			requestAnimationFrame(this.run.bind(this));
 		}
-		
-		this.updateWorld();
 		this.drawWorld();
-		
+			
 		//Tell the `renderer` to `render` the `stage`
 		this.renderer.render(this.stage);
+		this.graphicContext = document.getElementsByTagName("canvas")[0].getContext("webgl", {preserveDrawingBuffer: true});
+		
+		this.updateWorld();
+	
+	}
+
+	_run() {
+
 	}
 	
 	stop() {
@@ -211,15 +254,16 @@ Limb = class Limb {
 	}
 	
 	draw(graphics, parent) {
-		let angle = this.angle * Math.PI / 180;
-		let realX = 32*Math.cos(angle)+0*Math.sin(angle);
-		let realY = -32*Math.sin(angle)+0*Math.cos(angle);
+		let angle = parent.angle + this.angle;
+		let realX = 28*Math.cos(angle);//+0*Math.sin(angle);
+		let realY = -28*Math.sin(angle);//+0*Math.cos(angle);
 
 		graphics.beginFill(this.color);
 		graphics.drawCircle(parent.x+realX, parent.y+realY, 4);
 		graphics.endFill();
 	}
-	update() {}
+
+	update(world, parent) {}
 	
 	computeDNA() {
 		let linkedNeurons = [];
@@ -251,7 +295,47 @@ RGBSensor = class RGBSensor extends Sensor {
 	constructor(data) {
 		super(data);
 		// No need to specify the type : it is INPUT_LIMB by default
+		this.neededNeurons = 3 * 10;
 		this.class = "RGBSensor";
+		this._eyeValues = new Uint8Array(4);
+	}
+
+	update(world, parent) {
+		let angle = parent.angle + this.angle;
+		let ctx = world.graphicContext;
+
+		for(let i = 0; i < this.neededNeurons/3; i++) {
+			let x = 33 + i*10;
+			let realX = parent.x + (x*Math.cos(angle));
+			let realY = parent.y + (-x*Math.sin(angle));
+
+			if(realX < 0 || realY < 0 || realX > world.renderer.width || realY > world.renderer.height) {
+				this._eyeValues[0] = 0;
+				this._eyeValues[1] = 0;
+				this._eyeValues[2] = 0;
+			}
+			else {
+				ctx.readPixels(realX, realY, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, this._eyeValues);
+			}
+			//console.log(this._eyeValues[0]/255 + " "+ this._eyeValues[1]/255 + " "+ this._eyeValues[2]/255);
+			this.linkedNeurons[i*3].activation = this._eyeValues[0]/255;
+			this.linkedNeurons[i*3+1].activation = this._eyeValues[1]/255;
+			this.linkedNeurons[i*3+2].activation = this._eyeValues[2]/255;
+			/*
+			if(this._eyeValues[0]+this._eyeValues[1]+this._eyeValues[2] > 0) {
+				console.log("Distance = "+(i*5)+"px => "+this._eyeValues[0]+";"+this._eyeValues[1]+";"+this._eyeValues[2]);
+			}
+			*/
+		}
+	}
+
+	draw(graphics, parent) {
+		let r = Math.round(this.linkedNeurons[12].activation*255);
+		let g = Math.round(this.linkedNeurons[13].activation*255);
+		let b = Math.round(this.linkedNeurons[14].activation*255);
+		//console.log(r+" "+g+" "+b);
+		this.color = PIXI.utils.rgb2hex([r, g, b]);
+		super.draw(graphics, parent);
 	}
 }
 
@@ -260,12 +344,19 @@ Motor = class Motor extends Limb {
 	constructor(data) {
 		super(data);
 		this.type = OUTPUT_LIMB;
-		this.neededNeurons = 1;
+		this.neededNeurons = 2;
 		this.class = "Motor";
 		this.color = 0x4ff441;
 	}
+
+	draw(graphics, parent) {
+		super.draw(graphics, parent);
+	}
 }
 
+tryToFindPositionForLimb = function(angle, sensors, motors) {
+
+}
 
 Being = class Being {
 	constructor(DNAObject, startEnergy, x, y) {
@@ -286,8 +377,10 @@ Being = class Being {
 		
 		// Limbs loading
 		this.sensors = [];
+		this.motors = [];
 		for(let sensorDNA of DNAObject.sensors) {
-			// Create limb object
+			// Try to create limb object
+
 			let sensor = new window[sensorDNA.class](sensorDNA);
 			
 			// Attach neurons to it according to DNA
@@ -297,7 +390,6 @@ Being = class Being {
 			this.sensors.push(sensor);
 		}
 		
-		this.motors = [];
 		for(let motorDNA of DNAObject.motors) {
 			// Create limb object
 			let motor = new window[motorDNA.class](motorDNA);
@@ -309,6 +401,8 @@ Being = class Being {
 			this.motors.push(motor);
 		}
 		
+
+
 		// Create body data fields and attach neurons
 		this.energy = startEnergy;
 		if(!startEnergy) {this.energy = 1000;}
@@ -322,9 +416,13 @@ Being = class Being {
 		
 		this.reproductionNeuron = this.neuralSystem.outputs[DNAObject.reproductionNeuron];
 		
-		this.x = x;
-		this.y = y;
-		this.size = 64;
+		this.body = Physics.body('circle', {
+			x: x,
+			y: y,
+			radius: 32
+		});
+
+		world.physicsWorld.add(this.body);
 	}
 	
 	computeDNA() {
@@ -351,48 +449,61 @@ Being = class Being {
 	}
 
 	update(world) {
-		/* 
-		Boucler sur les prop d'un objet:
-		Object.keys(obj).forEach(function(prop){});
-		 */
 		this.tick+=1;
 		
 		this.damageNeuron.activate(this.damage);
 		this.energyNeuron.activate(this.energy);
 		
+
+		let parent = {x: this.body.state.pos.x, 
+					  y: this.body.state.pos.y, 
+					  angle: this.body.state.angular.pos};
+
+		for(let sensor of sensors) {
+			sensor.update(world, parent);
+		}
+
+		for(let motor of motors) {
+			motor.update(world, parent);
+		}
+
 		let being = this;
-		
+
 		Object.values(this.neuralSystem.inputs).forEach(function(neuron){
 			neuron.activateNetwork(being.tick);
 		});
 		
-		this.x += Math.floor(Math.random() * (1 - (-1) + 1) -1);
-		this.y += Math.floor(Math.random() * (1 - (-1) + 1) -1);
-		
-		if(this.x < 32) this.x = 64/2;
-		if(this.y < 32) this.y = 64/2;
-		if(this.x > world.renderer.width - 64/2) this.x = world.renderer.width -64/2;
-		if(this.y > world.renderer.height - 64/2) this.y = world.renderer.height -64/2;
+		let max = 0.0005;
+		let min = -0.0005;
+		let x = Math.random()*(max-min)+min;
+		let y = Math.random()*(max-min)+min;
+		let force = {x: x, y: y};
+		this.body.applyForce(force);
 	}
 
 	draw(world) {
 		let graphics = world.graphics;
-		
+		let x = this.body.state.pos.x;
+		let y = this.body.state.pos.y;
+		let angle = this.body.state.angular.pos;
+		let parent = {x: x, y: y, angle: angle};
+
 		graphics.beginFill(0x9966FF);
-		graphics.drawCircle(this.x, this.y, 32);
+		graphics.drawCircle(x, y, 32);
 		graphics.endFill();
 
 		
 		graphics.beginFill(0x41e8f4);
-		graphics.drawCircle(this.x, this.y, 26);
+		graphics.drawCircle(x, y, 24);
 		graphics.endFill();
 
+
 		for(let sensor of Object.values(this.sensors)) {
-			sensor.draw(graphics, this);
+			sensor.draw(graphics, parent);
 		}
 
 		for(let motor of Object.values(this.motors)) {
-			motor.draw(graphics, this);
+			motor.draw(graphics, parent);
 		}
 	}
 	
@@ -477,7 +588,8 @@ buildRandomNeuralSystem = function(inputNumber, outputNumber) {
 buildRandomSensors = function(number) {
 	sensors = [];
 	for(let i=0; i<number; i++) {
-		sensors.push(new RGBSensor({angle: Math.floor(Math.random()*(360))}));
+		let angle = (Math.floor(Math.random()*(360))) * Math.PI / 180;
+		sensors.push(new RGBSensor({angle: angle}));
 	}
 	
 	return sensors;
@@ -486,7 +598,8 @@ buildRandomSensors = function(number) {
 buildRandomMotors = function(number) {
 	motors = [];
 	for(let i=0; i<number; i++) {
-		motors.push(new Motor(({angle: Math.floor(Math.random()*(360))})));
+		let angle = (Math.floor(Math.random()*(360))) * Math.PI / 180;
+		motors.push(new Motor(({angle: angle})));
 	}
 	
 	return motors;
@@ -571,8 +684,8 @@ buildRandomBeingDNA = function() {
 }
 
 buildRandomBeing = function(world) {
-	let x = Math.floor((Math.random()*(world.renderer.width-64)-64)+64);
-	let y = Math.floor((Math.random()*(world.renderer.height-64)-64)+64);
+	let x = Math.floor(Math.random()*(world.renderer.width-64-64)+64);
+	let y = Math.floor(Math.random()*(world.renderer.height-64-64)+64);
 	
 	let being = new Being(buildRandomBeingDNA(), 1500, x, y);
 	
