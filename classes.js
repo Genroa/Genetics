@@ -28,6 +28,16 @@ componentToHex = function(c) {
 rgbToHex = function(r, g, b) {
     return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
 }
+
+// Converts from degrees to radians.
+Math.radians = function(degrees) {
+	return degrees * Math.PI / 180;
+};
+
+// Converts from radians to degrees.
+Math.degrees = function(radians) {
+	return radians * 180 / Math.PI;
+};
 /*********************
 CLASSES DEFINITION
 *********************/
@@ -298,6 +308,8 @@ RGBSensor = class RGBSensor extends Sensor {
 		this.neededNeurons = 3 * 10;
 		this.class = "RGBSensor";
 		this._eyeValues = new Uint8Array(4);
+		this.values = new Array(this.neededNeurons);
+		for(let i=0; i<this.neededNeurons;i++) {this.values[i] = [0, 0, 0]};
 	}
 
 	update(world, parent) {
@@ -305,7 +317,7 @@ RGBSensor = class RGBSensor extends Sensor {
 		let ctx = world.graphicContext;
 
 		for(let i = 0; i < this.neededNeurons/3; i++) {
-			let x = 33 + i*10;
+			let x = 34 + i*10;
 			let realX = parent.x + (x*Math.cos(angle));
 			let realY = parent.y + (-x*Math.sin(angle));
 
@@ -317,23 +329,41 @@ RGBSensor = class RGBSensor extends Sensor {
 			else {
 				ctx.readPixels(realX, realY, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, this._eyeValues);
 			}
-			//console.log(this._eyeValues[0]/255 + " "+ this._eyeValues[1]/255 + " "+ this._eyeValues[2]/255);
-			this.linkedNeurons[i*3].activation = this._eyeValues[0]/255;
-			this.linkedNeurons[i*3+1].activation = this._eyeValues[1]/255;
-			this.linkedNeurons[i*3+2].activation = this._eyeValues[2]/255;
+			
+			this.linkedNeurons[i*3].activate(this._eyeValues[0]/255);
+			this.linkedNeurons[i*3+1].activate(this._eyeValues[1]/255);
+			this.linkedNeurons[i*3+2].activate(this._eyeValues[2]/255);
+			
+			this.values[i] = [this._eyeValues[0], this._eyeValues[1], this._eyeValues[2]];
 			/*
 			if(this._eyeValues[0]+this._eyeValues[1]+this._eyeValues[2] > 0) {
 				console.log("Distance = "+(i*5)+"px => "+this._eyeValues[0]+";"+this._eyeValues[1]+";"+this._eyeValues[2]);
 			}
 			*/
 		}
+
+		console.log(JSON.stringify(this.values));
 	}
 
 	draw(graphics, parent) {
-		let r = Math.round(this.linkedNeurons[12].activation*255);
+		let max = 1;
+		let total_r = 0;
+		let total_g = 0;
+		let total_b = 0;
+		//console.log(JSON.stringify(this.values));
+		for(let arr of this.values) {
+			total_r += arr[0];
+			total_g += arr[1];
+			total_b += arr[2];
+		}
+
+		let r = total_r / max;
+		let g = total_g / max;
+		let b = total_b / max;
+		/*let r = Math.round(this.linkedNeurons[12].activation*255);
 		let g = Math.round(this.linkedNeurons[13].activation*255);
-		let b = Math.round(this.linkedNeurons[14].activation*255);
-		//console.log(r+" "+g+" "+b);
+		let b = Math.round(this.linkedNeurons[14].activation*255);*/
+		console.log(r+" "+g+" "+b);
 		this.color = PIXI.utils.rgb2hex([r, g, b]);
 		super.draw(graphics, parent);
 	}
@@ -459,8 +489,10 @@ Being = class Being {
 					  y: this.body.state.pos.y, 
 					  angle: this.body.state.angular.pos};
 
+		let i=0;
 		for(let sensor of sensors) {
 			sensor.update(world, parent);
+			i++;
 		}
 
 		for(let motor of motors) {
@@ -499,6 +531,7 @@ Being = class Being {
 
 
 		for(let sensor of Object.values(this.sensors)) {
+			console.log(JSON.stringify(sensor.values));
 			sensor.draw(graphics, parent);
 		}
 
